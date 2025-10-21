@@ -1,6 +1,7 @@
 import type { ITask } from './task.model';
-import { Controller, Get, NotFoundException, Param } from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, Post } from '@nestjs/common';
 import { TaskService } from './task.service';
+import { CreateTaskDto } from './create-task.dto';
 
 @Controller('task')
 export class TaskController {
@@ -22,5 +23,10 @@ export class TaskController {
         }
 
         throw new NotFoundException();
+    }
+
+    @Post()
+    public create (@Body() createTaskDto: CreateTaskDto) {
+        return this.taskService.create(createTaskDto);
     }
 }
