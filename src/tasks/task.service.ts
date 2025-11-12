@@ -1,27 +1,71 @@
+import { WrongTaskStatusExcepetion } from './exceptions/wrong-task-status.exception';
+import { UpdateTaskDto } from './update-task.dto';
 import { Injectable } from '@nestjs/common';
-import { ITask } from './task.model';
+import { TaskStatus } from './task.model';
 import { CreateTaskDto } from './create-task.dto';
-import { randomUUID } from 'crypto';
+import { Repository } from 'typeorm';
+import { Task } from './task.entity';
+import { InjectRepository } from '@nestjs/typeorm';
+import { CreateTaskLabelDto } from './create-task-label.dto';
+import { TaskLabel } from './task-label.entity';
 
 @Injectable()
 export class TaskService {
-    private tasks: ITask[] = [];
+    constructor (
+        @InjectRepository(Task)
+        private readonly tasksRepository: Repository<Task>,
+        @InjectRepository(TaskLabel)
+        private readonly labelsRepository: Repository<TaskLabel>,
+    ) {}
 
-    findAll(): ITask[] {
-        return this.tasks;
+    public async findAll(): Promise<Task[]> {
+        return await this.tasksRepository.find();
     }
 
-    findOne(id: string): ITask | undefined {
-        return this.tasks.find((task) => task.id == id);
+    public async findOne(id: string): Promise<Task | null> {
+        return await this.tasksRepository.findOne({
+            where: { id },
+            relations: ['labels']
+        });
     }
 
-    create(createTaskDto: CreateTaskDto): ITask {
-        const task: ITask = {
-            id: randomUUID(),
-            ...createTaskDto,
-        };
+    public async createTask(createTaskDto: CreateTaskDto): Promise<Task> {
+        return await this.tasksRepository.save(createTaskDto);
+    }
 
-        this.tasks.push(task);
-        return task;
+    public async addLabels(
+        task: Task,
+        labelDtos: CreateTaskLabelDto[],
+    ): Promise<Task> {
+    const labels = labelDtos.map((label) =>
+      this.labelsRepository.create(label),
+    );
+    task.labels = [...task.labels, ...labels];
+    return await this.tasksRepository.save(task);
+  }
+
+    public async updateTask(task: Task, updateTaskDto: UpdateTaskDto): Promise<Task> {
+        if (updateTaskDto.status && !this.isValidStatusTransition(task.status, updateTaskDto.status)) {
+            throw new WrongTaskStatusExcepetion();
+        }
+        Object.assign(task, updateTaskDto);
+        return await this.tasksRepository.save(task);
+    }
+
+    private isValidStatusTransition(
+        currentStatus: TaskStatus,
+        newStatus: TaskStatus
+    ): boolean {
+        const statusOrder = [
+            TaskStatus.OPEN,
+            TaskStatus.IN_PROGRESS,
+            TaskStatus.DONE
+        ];
+
+        return statusOrder.indexOf(currentStatus) <= statusOrder.indexOf(newStatus);
+    }
+
+    public async deleteTask(task: Task): Promise<void> {
+        await this.tasksRepository.delete(task);
     }
 }
